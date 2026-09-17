@@ -1,9 +1,9 @@
 {
   "id": "org.trainagain2.torrent-indexer-nuvio",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "name": "Torrent Indexer",
   "description": "Resultados de streaming online e BitTorrent para Nuvio.",
-  "logo": "/assets/torrent-indexer-logo.png?v=1.2.0",
+  "logo": "/assets/torrent-indexer-logo.png?v=1.3.0",
   "resources": [
     {
       "name": "stream",
