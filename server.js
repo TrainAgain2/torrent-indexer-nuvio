@@ -142,6 +142,14 @@ export const server = createServer(async (request, response) => {
   return sendJson(response, 404, { error: "Not found" });
 });
 
-if (process.env.NODE_ENV !== "test") {
+/**
+ * Vercel invokes the default export as a Node.js serverless function. The
+ * same request listener is also used by the standalone local HTTP server.
+ */
+export default function handler(request, response) {
+  server.emit("request", request, response);
+}
+
+if (process.env.NODE_ENV !== "test" && !process.env.VERCEL) {
   server.listen(Number(process.env.PORT || 3000));
 }

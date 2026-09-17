@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { manifest, toStream } from "../server.js";
+import handler, { manifest, toStream } from "../server.js";
 
 test("manifest declares Nuvio movie and series streams", () => {
+  assert.equal(typeof handler, "function");
   assert.equal(manifest.id, "org.trainagain2.torrent-indexer-nuvio");
   assert.equal(manifest.behaviorHints.p2p, true);
   assert.deepEqual(manifest.types, ["movie", "series"]);
