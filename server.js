@@ -2,17 +2,19 @@ import { createServer } from "node:http";
 
 const ADDON_ID = "org.trainagain2.torrent-indexer-nuvio";
 const ADDON_NAME = "Torrent Indexer Nuvio";
-const ADDON_VERSION = "1.0.0";
+const ADDON_VERSION = "1.1.0";
 const INDEXER_URL = "https://torrent-indexer.darklyn.org";
 const CINEMETA_URL = "https://v3-cinemeta.strem.io";
+const EXTERNAL_RESULTS_URL = "https://bestcine.dpdns.org";
 const MAX_RESULTS = 25;
+const MAX_EXTERNAL_RESULTS = 60;
 const REQUEST_TIMEOUT_MS = 15_000;
 
 export const manifest = {
   id: ADDON_ID,
   version: ADDON_VERSION,
   name: ADDON_NAME,
-  description: "Fontes BitTorrent pesquisadas pelo Torrent Indexer para Nuvio.",
+  description: "Resultados de streaming online e BitTorrent para Nuvio.",
   resources: [{ name: "stream", types: ["movie", "series"], idPrefixes: ["tt"] }],
   types: ["movie", "series"],
   catalogs: [],
@@ -77,11 +79,61 @@ export function toStream(result) {
   return stream;
 }
 
+function cleanPresentationText(value) {
+  return String(value || "")
+    .replace(/bestcine/gi, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function groupFragment(value) {
+  return cleanPresentationText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 80) || "stream";
+}
+
+/** Convert an authorized external result into a neutral Nuvio stream label. */
+export function toOnlineStream(result) {
+  const url = String(result?.url || "").trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+
+  const nameLines = cleanPresentationText(result?.name)
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  const quality = nameLines.slice(1).join(" · ")
+    || nameLines.find(line => !/bestcine/i.test(line))
+    || "Online";
+  const title = cleanPresentationText(result?.title) || "Stream online";
+
+  return {
+    name: `🧲 Torrent Indexer\n${quality}`,
+    title,
+    url,
+    behaviorHints: {
+      notWebReady: Boolean(result?.behaviorHints?.notWebReady),
+      bingeGroup: `trainagain-online-${groupFragment(`${title}-${quality}`)}`,
+    },
+  };
+}
+
 async function getJson(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(url, { headers: { accept: "application/json" }, signal: controller.signal });
+    const response = await fetch(url, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "TrainAgain-Nuvio-Addon/1.1",
+      },
+      signal: controller.signal,
+    });
     if (!response.ok) throw new Error(`Upstream status ${response.status}`);
     return response.json();
   } finally {
@@ -112,6 +164,35 @@ async function getStreams(type, rawId) {
     .filter(stream => stream && !seen.has(stream.infoHash) && seen.add(stream.infoHash));
 }
 
+async function getOnlineStreams(type, rawId) {
+  if (type !== "movie" && type !== "series") return [];
+  const media = normalizeId(rawId);
+  if (!media) return [];
+
+  const externalId = [media.imdbId, media.season, media.episode].filter(Boolean).join(":");
+  const payload = await getJson(`${EXTERNAL_RESULTS_URL}/stream/${type}/${externalId}.json`);
+  return (Array.isArray(payload?.streams) ? payload.streams : [])
+    .map(toOnlineStream)
+    .filter(Boolean)
+    .slice(0, MAX_EXTERNAL_RESULTS);
+}
+
+async function getAllStreams(type, rawId) {
+  const [onlineResult, torrentResult] = await Promise.allSettled([
+    getOnlineStreams(type, rawId),
+    getStreams(type, rawId),
+  ]);
+  const candidates = [
+    ...(onlineResult.status === "fulfilled" ? onlineResult.value : []),
+    ...(torrentResult.status === "fulfilled" ? torrentResult.value : []),
+  ];
+  const seen = new Set();
+  return candidates.filter(stream => {
+    const key = stream.url || stream.infoHash;
+    return key && !seen.has(key) && seen.add(key);
+  });
+}
+
 export const server = createServer(async (request, response) => {
   if (request.method === "OPTIONS") {
     response.writeHead(204, {
@@ -131,7 +212,7 @@ export const server = createServer(async (request, response) => {
   const streamRoute = url.pathname.match(/^\/stream\/(movie|series)\/(.+)\.json$/);
   if (streamRoute) {
     try {
-      const streams = await getStreams(streamRoute[1], streamRoute[2]);
+      const streams = await getAllStreams(streamRoute[1], streamRoute[2]);
       return sendJson(response, 200, { streams });
     } catch (error) {
       console.error("Stream lookup failed:", error instanceof Error ? error.message : error);

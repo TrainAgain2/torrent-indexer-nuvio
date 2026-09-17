@@ -1,6 +1,6 @@
 # Torrent Indexer Nuvio
 
-Addon de streams para **Nuvio**, mantido por **TrainAgain**. Converte resultados públicos do Torrent Indexer em fontes BitTorrent compatíveis com filmes e séries por IMDb.
+Addon de streams para **Nuvio**, mantido por **TrainAgain**. Reúne resultados online e BitTorrent compatíveis com filmes e séries por IMDb.
 
 ## Instalação no Nuvio
 
@@ -11,6 +11,8 @@ https://torrent-indexer-nuvio.vercel.app/manifest.json
 ```
 
 No Nuvio, abra **Perfil → Addons → Adicionar addon a partir de URL**, cole o link acima e confirme.
+
+O addon disponibiliza apenas resultados de filmes e séries solicitados pelo Nuvio; não adiciona catálogos externos à página inicial.
 
 ## Rotas
 
