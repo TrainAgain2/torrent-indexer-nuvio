@@ -1,0 +1,14 @@
+{
+  "name": "torrent-indexer-nuvio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TrainAgain Nuvio addon for Torrent Indexer streams",
+  "scripts": {
+    "start": "node server.js",
+    "test": "NODE_ENV=test node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

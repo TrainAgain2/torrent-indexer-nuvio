@@ -1,0 +1,18 @@
+{
+  "id": "org.trainagain2.torrent-indexer-nuvio",
+  "version": "1.0.0",
+  "name": "Torrent Indexer Nuvio",
+  "description": "Fontes BitTorrent pesquisadas pelo Torrent Indexer para Nuvio.",
+  "resources": [
+    {
+      "name": "stream",
+      "types": ["movie", "series"],
+      "idPrefixes": ["tt"]
+    }
+  ],
+  "types": ["movie", "series"],
+  "catalogs": [],
+  "behaviorHints": {
+    "p2p": true
+  }
+}
