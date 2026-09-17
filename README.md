@@ -4,13 +4,13 @@ Addon de streams para **Nuvio**, mantido por **TrainAgain**. Converte resultados
 
 ## Instalação no Nuvio
 
-Depois da publicação na Vercel, use:
+Use este link de instalação:
 
 ```text
-https://<domínio-vercel>/manifest.json
+https://torrent-indexer-nuvio.vercel.app/manifest.json
 ```
 
-No Nuvio, abra **Perfil → Addons → Adicionar addon a partir de URL** e cole o URL acima.
+No Nuvio, abra **Perfil → Addons → Adicionar addon a partir de URL**, cole o link acima e confirme.
 
 ## Rotas
 
@@ -20,13 +20,6 @@ No Nuvio, abra **Perfil → Addons → Adicionar addon a partir de URL** e cole 
 | `/stream/movie/{imdbId}.json` | Streams de filmes. |
 | `/stream/series/{imdbId}:{temporada}:{episódio}.json` | Streams de episódios. |
 | `/healthz` | Estado do serviço. |
-
-## Publicar na Vercel
-
-1. Entre em [Vercel](https://vercel.com/login) usando a conta GitHub **TrainAgain2**.
-2. Selecione **Add New → Project** e importe este repositório.
-3. Clique em **Deploy**; não são necessárias variáveis de ambiente.
-4. Copie o domínio `vercel.app` fornecido e acrescente `/manifest.json`.
 
 ## Executar localmente
 
