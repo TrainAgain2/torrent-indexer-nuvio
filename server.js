@@ -1,11 +1,14 @@
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { fileURLToPath } from "node:url";
 
 const ADDON_ID = "org.trainagain2.torrent-indexer-nuvio";
-const ADDON_NAME = "Torrent Indexer Nuvio";
-const ADDON_VERSION = "1.1.0";
+const ADDON_NAME = "Torrent Indexer";
+const ADDON_VERSION = "1.2.0";
 const INDEXER_URL = "https://torrent-indexer.darklyn.org";
 const CINEMETA_URL = "https://v3-cinemeta.strem.io";
 const EXTERNAL_RESULTS_URL = "https://bestcine.dpdns.org";
+const LOGO_PATH = fileURLToPath(new URL("./assets/torrent-indexer-logo.png", import.meta.url));
 const MAX_RESULTS = 25;
 const MAX_EXTERNAL_RESULTS = 60;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -15,6 +18,7 @@ export const manifest = {
   version: ADDON_VERSION,
   name: ADDON_NAME,
   description: "Resultados de streaming online e BitTorrent para Nuvio.",
+  logo: "/assets/torrent-indexer-logo.png?v=1.2.0",
   resources: [{ name: "stream", types: ["movie", "series"], idPrefixes: ["tt"] }],
   types: ["movie", "series"],
   catalogs: [],
@@ -30,6 +34,20 @@ function sendJson(response, statusCode, body) {
     "content-type": "application/json; charset=utf-8",
   });
   response.end(JSON.stringify(body));
+}
+
+async function sendLogo(response) {
+  try {
+    const image = await readFile(LOGO_PATH);
+    response.writeHead(200, {
+      "access-control-allow-origin": "*",
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-type": "image/png",
+    });
+    response.end(image);
+  } catch {
+    sendJson(response, 404, { error: "Logo not found" });
+  }
 }
 
 function sendHtml(response, request) {
@@ -207,6 +225,7 @@ export const server = createServer(async (request, response) => {
   const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
   if (request.method !== "GET") return sendJson(response, 405, { error: "Method not allowed" });
   if (url.pathname === "/manifest.json") return sendJson(response, 200, manifest);
+  if (url.pathname === "/assets/torrent-indexer-logo.png") return await sendLogo(response);
   if (url.pathname === "/healthz") return sendJson(response, 200, { status: "ok", addon: ADDON_ID, version: ADDON_VERSION });
 
   const streamRoute = url.pathname.match(/^\/stream\/(movie|series)\/(.+)\.json$/);

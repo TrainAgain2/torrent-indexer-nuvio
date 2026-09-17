@@ -5,7 +5,9 @@ import handler, { manifest, toOnlineStream, toStream } from "../server.js";
 test("manifest declares Nuvio movie and series streams", () => {
   assert.equal(typeof handler, "function");
   assert.equal(manifest.id, "org.trainagain2.torrent-indexer-nuvio");
-  assert.equal(manifest.version, "1.1.0");
+  assert.equal(manifest.name, "Torrent Indexer");
+  assert.equal(manifest.version, "1.2.0");
+  assert.equal(manifest.logo, "/assets/torrent-indexer-logo.png?v=1.2.0");
   assert.equal(manifest.behaviorHints.p2p, true);
   assert.deepEqual(manifest.types, ["movie", "series"]);
   assert.deepEqual(manifest.resources, [{ name: "stream", types: ["movie", "series"], idPrefixes: ["tt"] }]);
