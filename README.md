@@ -14,12 +14,6 @@ No Nuvio, abra **Perfil → Addons → Adicionar addon a partir de URL**, cole o
 
 O addon disponibiliza apenas resultados de filmes e séries solicitados pelo Nuvio; não adiciona catálogos externos à página inicial.
 
-## Providers validados
-
-O addon usa um adaptador próprio para o **MegaEmbed**, validado para filmes e séries. O servidor consulta apenas a página do provider, valida os URLs HTTPS apresentados e devolve os resultados ao Nuvio; não descarrega nem segue URLs de vídeo no servidor.
-
-Os módulos upstream que não passaram a revisão de segurança ou não devolveram resultados no teste controlado não são incluídos.
-
 ## Rotas
 
 | Rota | Função |
