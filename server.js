@@ -5,11 +5,12 @@ import { getMegaEmbedStreams } from "./providers/megaembed.js";
 
 const ADDON_ID = "org.trainagain2.torrent-indexer-nuvio";
 const ADDON_NAME = "Torrent Indexer";
-const ADDON_VERSION = "1.4.0";
+const ADDON_VERSION = "1.4.1";
 const INDEXER_URL = "https://torrent-indexer.darklyn.org";
 const CINEMETA_URL = "https://v3-cinemeta.strem.io";
 const EXTERNAL_RESULTS_URL = "https://bestcine.dpdns.org";
 const LOGO_PATH = fileURLToPath(new URL("./assets/torrent-indexer-logo.png", import.meta.url));
+const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.1";
 const MAX_RESULTS = 25;
 const MAX_EXTERNAL_RESULTS = 60;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -19,7 +20,7 @@ export const manifest = {
   version: ADDON_VERSION,
   name: ADDON_NAME,
   description: "Resultados de streaming online e BitTorrent para Nuvio.",
-  logo: "/assets/torrent-indexer-logo.png?v=1.4.0",
+  logo: LOGO_URL,
   resources: [{ name: "stream", types: ["movie", "series"], idPrefixes: ["tt"] }],
   types: ["movie", "series"],
   catalogs: [],
