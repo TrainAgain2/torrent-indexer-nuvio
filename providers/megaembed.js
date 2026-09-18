@@ -4,7 +4,14 @@ const MAX_STREAMS = 8;
 
 const requestHeaders = {
   accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "user-agent": "Mozilla/5.0 (compatible; TorrentIndexer/1.4)",
+  "accept-language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+  dnt: "1",
+  origin: MEGAEMBED_BASE_URL,
+  referer: `${MEGAEMBED_BASE_URL}/`,
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+  "sec-fetch-site": "same-origin",
+  "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0",
 };
 
 function isPublicHttpsUrl(value) {

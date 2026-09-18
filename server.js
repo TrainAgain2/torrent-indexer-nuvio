@@ -5,12 +5,12 @@ import { getMegaEmbedStreams } from "./providers/megaembed.js";
 
 const ADDON_ID = "org.trainagain2.torrent-indexer-nuvio";
 const ADDON_NAME = "Torrent Indexer";
-const ADDON_VERSION = "1.4.1";
+const ADDON_VERSION = "1.4.2";
 const INDEXER_URL = "https://torrent-indexer.darklyn.org";
 const CINEMETA_URL = "https://v3-cinemeta.strem.io";
 const EXTERNAL_RESULTS_URL = "https://bestcine.dpdns.org";
 const LOGO_PATH = fileURLToPath(new URL("./assets/torrent-indexer-logo.png", import.meta.url));
-const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.1";
+const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.2";
 const MAX_RESULTS = 25;
 const MAX_EXTERNAL_RESULTS = 60;
 const REQUEST_TIMEOUT_MS = 15_000;

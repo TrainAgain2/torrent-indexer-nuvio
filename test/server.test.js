@@ -6,10 +6,10 @@ test("manifest declares Nuvio movie and series streams", () => {
   assert.equal(typeof handler, "function");
   assert.equal(manifest.id, "org.trainagain2.torrent-indexer-nuvio");
   assert.equal(manifest.name, "Torrent Indexer");
-  assert.equal(manifest.version, "1.4.1");
+  assert.equal(manifest.version, "1.4.2");
   assert.equal(
     manifest.logo,
-    "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.1",
+    "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.2",
   );
   assert.equal(manifest.behaviorHints.p2p, true);
   assert.deepEqual(manifest.types, ["movie", "series"]);
