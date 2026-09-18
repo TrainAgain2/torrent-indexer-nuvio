@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
+import { getMegaEmbedStreams } from "./providers/megaembed.js";
 
 const ADDON_ID = "org.trainagain2.torrent-indexer-nuvio";
 const ADDON_NAME = "Torrent Indexer";
-const ADDON_VERSION = "1.3.0";
+const ADDON_VERSION = "1.4.0";
 const INDEXER_URL = "https://torrent-indexer.darklyn.org";
 const CINEMETA_URL = "https://v3-cinemeta.strem.io";
 const EXTERNAL_RESULTS_URL = "https://bestcine.dpdns.org";
@@ -18,7 +19,7 @@ export const manifest = {
   version: ADDON_VERSION,
   name: ADDON_NAME,
   description: "Resultados de streaming online e BitTorrent para Nuvio.",
-  logo: "/assets/torrent-indexer-logo.png?v=1.3.0",
+  logo: "/assets/torrent-indexer-logo.png?v=1.4.0",
   resources: [{ name: "stream", types: ["movie", "series"], idPrefixes: ["tt"] }],
   types: ["movie", "series"],
   catalogs: [],
@@ -195,13 +196,33 @@ async function getOnlineStreams(type, rawId) {
     .slice(0, MAX_EXTERNAL_RESULTS);
 }
 
+/** Resolve the provider's required TMDb ID from the Nuvio IMDb request. */
+async function getMegaEmbedProviderStreams(type, rawId) {
+  if (type !== "movie" && type !== "series") return [];
+  const media = normalizeId(rawId);
+  if (!media) return [];
+
+  const meta = await getJson(`${CINEMETA_URL}/meta/${type}/${media.imdbId}.json`);
+  const tmdbId = Number(meta?.meta?.moviedb_id ?? meta?.meta?.tmdb_id);
+  if (!Number.isSafeInteger(tmdbId) || tmdbId <= 0) return [];
+
+  return getMegaEmbedStreams({
+    tmdbId,
+    type,
+    season: media.season,
+    episode: media.episode,
+  });
+}
+
 async function getAllStreams(type, rawId) {
-  const [onlineResult, torrentResult] = await Promise.allSettled([
+  const [onlineResult, megaEmbedResult, torrentResult] = await Promise.allSettled([
     getOnlineStreams(type, rawId),
+    getMegaEmbedProviderStreams(type, rawId),
     getStreams(type, rawId),
   ]);
   const candidates = [
     ...(onlineResult.status === "fulfilled" ? onlineResult.value : []),
+    ...(megaEmbedResult.status === "fulfilled" ? megaEmbedResult.value : []),
     ...(torrentResult.status === "fulfilled" ? torrentResult.value : []),
   ];
   const seen = new Set();
