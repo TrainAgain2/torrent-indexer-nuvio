@@ -4,19 +4,18 @@ import { fileURLToPath } from "node:url";
 
 const ADDON_ID = "org.trainagain2.torrent-indexer-nuvio";
 const ADDON_NAME = "Torrent Indexer";
-const ADDON_VERSION = "1.4.6";
-const INDEXER_URL = "https://torrent-indexer.darklyn.org";
+const ADDON_VERSION = "1.4.7";
 const CINEMETA_URL = "https://v3-cinemeta.strem.io";
+const EXTERNAL_RESULTS_URL = "https://bestcine.dpdns.org";
 const LOGO_PATH = fileURLToPath(new URL("./assets/torrent-indexer-logo.png", import.meta.url));
-const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.6";
-const MAX_RESULTS = 25;
+const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.7";
 const REQUEST_TIMEOUT_MS = 15_000;
 
 export const manifest = {
   id: ADDON_ID,
   version: ADDON_VERSION,
   name: ADDON_NAME,
-  description: "Resultados BitTorrent para Nuvio.",
+  description: "Resultados diretos e BitTorrent para Nuvio.",
   logo: LOGO_URL,
   resources: [{ name: "stream", types: ["movie", "series"], idPrefixes: ["tt"] }],
   types: ["movie", "series"],
@@ -33,6 +32,17 @@ function sendJson(response, statusCode, body) {
     "content-type": "application/json; charset=utf-8",
   });
   response.end(JSON.stringify(body));
+}
+
+function sendRedirect(response, destination) {
+  response.writeHead(302, {
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "GET, OPTIONS",
+    "access-control-expose-headers": "Location",
+    "cache-control": "no-store",
+    location: destination,
+  });
+  response.end();
 }
 
 async function sendLogo(response) {
@@ -63,96 +73,59 @@ function normalizeId(rawId) {
   return { imdbId: match[1].toLowerCase(), season: match[2], episode: match[3] };
 }
 
-function asTrackerSource(value) {
-  const tracker = String(value || "").trim();
-  return /^(https?|udp):\/\//i.test(tracker) ? `tracker:${tracker}` : null;
+function validTmdbId(value) {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? String(id) : null;
 }
 
-function sourceMetadata(result) {
-  return [
-    result.size ? `💾 ${result.size}` : null,
-    Number.isFinite(result.seed_count) ? `👥 ${result.seed_count} seeds` : null,
-    Array.isArray(result.audio) && result.audio.length ? `🌐 ${result.audio.join(", ")}` : null,
-  ].filter(Boolean).join("  •  ");
-}
-
-export function toStream(result) {
-  const infoHash = String(result.info_hash || "").trim().toLowerCase();
-  const title = String(result.title || "").trim();
-  if (!/^[a-f0-9]{40}$/.test(infoHash) || !title) return null;
-
-  const sources = (Array.isArray(result.trackers) ? result.trackers : [])
-    .map(asTrackerSource)
-    .filter(Boolean)
-    .slice(0, 20);
-  const metadata = sourceMetadata(result);
-  const stream = {
-    name: "🧲 Torrent Indexer",
-    title: metadata ? `${title}\n${metadata}` : title,
-    infoHash,
-    behaviorHints: { bingeGroup: `trainagain-${infoHash}` },
-  };
-  if (sources.length) stream.sources = sources;
-  return stream;
-}
-
-async function getJson(url, { attempts = 1 } = {}) {
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      const response = await fetch(url, {
-        headers: {
-          accept: "application/json",
-          "user-agent": "TrainAgain-Nuvio-Addon/1.1",
-        },
-        signal: controller.signal,
-      });
-      if (!response.ok) throw new Error(`Upstream status ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts) {
-        await new Promise(resolve => setTimeout(resolve, EXTERNAL_RETRY_DELAY_MS));
-      }
-    } finally {
-      clearTimeout(timer);
-    }
+/** Build the externally supported ID without making a request to the media host. */
+export function externalStreamId(type, media, tmdbId) {
+  if (!media?.imdbId) return null;
+  if (type === "movie") {
+    const tmdb = validTmdbId(tmdbId);
+    return tmdb ? `${media.imdbId}:${tmdb}` : media.imdbId;
   }
-  throw lastError;
+  if (type === "series" && media.season && media.episode) {
+    return `${media.imdbId}:${media.season}:${media.episode}`;
+  }
+  return media.imdbId;
 }
 
-async function getStreams(type, rawId) {
-  if (type !== "movie" && type !== "series") return [];
+async function getJson(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      headers: { accept: "application/json", "user-agent": "TrainAgain-Nuvio-Addon/1.1" },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`Upstream status ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The direct-stream host binds playback tokens to the requester IP. Redirecting
+ * lets the Cinebox device request the stream list itself, so the returned token
+ * remains valid when the player opens it. The Vercel app only retrieves TMDb
+ * metadata for movie ID compatibility and never requests media tokens.
+ */
+async function directStreamListUrl(type, rawId) {
+  if (type !== "movie" && type !== "series") return null;
   const media = normalizeId(rawId);
-  if (!media) return [];
+  if (!media) return null;
 
-  const meta = await getJson(`${CINEMETA_URL}/meta/${type}/${media.imdbId}.json`);
-  const title = String(meta?.meta?.name || "").trim();
-  if (!title) return [];
-
-  const query = media.season && media.episode
-    ? `${title} S${media.season.padStart(2, "0")}E${media.episode.padStart(2, "0")}`
-    : title;
-  const url = new URL("/search", INDEXER_URL);
-  url.searchParams.set("q", query);
-  url.searchParams.set("limit", String(MAX_RESULTS));
-
-  const search = await getJson(url);
-  const seen = new Set();
-  return (Array.isArray(search?.results) ? search.results : [])
-    .map(toStream)
-    .filter(stream => stream && !seen.has(stream.infoHash) && seen.add(stream.infoHash));
-}
-
-async function getAllStreams(type, rawId) {
-  const candidates = await getStreams(type, rawId);
-  const seen = new Set();
-  return candidates.filter(stream => {
-    const key = stream.url || stream.infoHash;
-    return key && !seen.has(key) && seen.add(key);
-  });
+  let tmdbId = null;
+  if (type === "movie") {
+    const metadata = await getJson(`${CINEMETA_URL}/meta/movie/${media.imdbId}.json`);
+    tmdbId = metadata?.meta?.moviedb_id;
+  }
+  const externalId = externalStreamId(type, media, tmdbId);
+  return externalId
+    ? `${EXTERNAL_RESULTS_URL}/stream/${type}/${encodeURIComponent(externalId)}.json`
+    : null;
 }
 
 export const server = createServer(async (request, response) => {
@@ -175,10 +148,11 @@ export const server = createServer(async (request, response) => {
   const streamRoute = url.pathname.match(/^\/stream\/(movie|series)\/(.+)\.json$/);
   if (streamRoute) {
     try {
-      const streams = await getAllStreams(streamRoute[1], streamRoute[2]);
-      return sendJson(response, 200, { streams });
+      const target = await directStreamListUrl(streamRoute[1], streamRoute[2]);
+      if (!target) return sendJson(response, 200, { streams: [] });
+      return sendRedirect(response, target);
     } catch (error) {
-      console.error("Stream lookup failed:", error instanceof Error ? error.message : error);
+      console.error("Stream redirect failed:", error instanceof Error ? error.message : error);
       return sendJson(response, 200, { streams: [] });
     }
   }
@@ -186,10 +160,7 @@ export const server = createServer(async (request, response) => {
   return sendJson(response, 404, { error: "Not found" });
 });
 
-/**
- * Vercel invokes the default export as a Node.js serverless function. The
- * same request listener is also used by the standalone local HTTP server.
- */
+/** Vercel invokes the default export as a Node.js serverless function. */
 export default function handler(request, response) {
   server.emit("request", request, response);
 }
