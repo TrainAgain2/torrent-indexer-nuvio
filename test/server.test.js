@@ -1,15 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import handler, { manifest, toOnlineStream, toStream } from "../server.js";
+import handler, { externalStreamIds, manifest, toOnlineStream, toStream } from "../server.js";
 
 test("manifest declares Nuvio movie and series streams", () => {
   assert.equal(typeof handler, "function");
   assert.equal(manifest.id, "org.trainagain2.torrent-indexer-nuvio");
   assert.equal(manifest.name, "Torrent Indexer");
-  assert.equal(manifest.version, "1.4.3");
+  assert.equal(manifest.version, "1.4.4");
   assert.equal(
     manifest.logo,
-    "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.3",
+    "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.4",
   );
   assert.equal(manifest.behaviorHints.p2p, true);
   assert.deepEqual(manifest.types, ["movie", "series"]);
@@ -33,7 +33,19 @@ test("torrent result becomes a valid info-hash stream", () => {
 test("invalid torrent result is ignored", () => {
   assert.equal(toStream({ title: "No hash" }), null);
 });
-
+test("external source uses IMDb and TMDb together for movies", () => {
+  assert.deepEqual(
+    externalStreamIds("movie", { imdbId: "tt29512655" }, 1323244),
+    ["tt29512655:1323244", "tt29512655"],
+  );
+  assert.deepEqual(externalStreamIds("movie", { imdbId: "tt29512655" }, null), ["tt29512655"]);
+});
+test("external source keeps native episode IDs for series", () => {
+  assert.deepEqual(
+    externalStreamIds("series", { imdbId: "tt0944947", season: "1", episode: "1" }, 1399),
+    ["tt0944947:1:1"],
+  );
+});
 test("online result uses a neutral presentation without an origin label", () => {
   const stream = toOnlineStream({
     name: "BestCine\n4K HDR",

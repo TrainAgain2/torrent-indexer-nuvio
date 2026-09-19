@@ -4,15 +4,17 @@ import { fileURLToPath } from "node:url";
 
 const ADDON_ID = "org.trainagain2.torrent-indexer-nuvio";
 const ADDON_NAME = "Torrent Indexer";
-const ADDON_VERSION = "1.4.3";
+const ADDON_VERSION = "1.4.4";
 const INDEXER_URL = "https://torrent-indexer.darklyn.org";
 const CINEMETA_URL = "https://v3-cinemeta.strem.io";
 const EXTERNAL_RESULTS_URL = "https://bestcine.dpdns.org";
 const LOGO_PATH = fileURLToPath(new URL("./assets/torrent-indexer-logo.png", import.meta.url));
-const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.3";
+const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.4";
 const MAX_RESULTS = 25;
 const MAX_EXTERNAL_RESULTS = 60;
 const REQUEST_TIMEOUT_MS = 15_000;
+const EXTERNAL_RETRY_ATTEMPTS = 2;
+const EXTERNAL_RETRY_DELAY_MS = 350;
 
 export const manifest = {
   id: ADDON_ID,
@@ -63,6 +65,26 @@ function normalizeId(rawId) {
   const match = decodeURIComponent(rawId).trim().match(/^(tt\d{5,12})(?::(\d+):(\d+))?$/i);
   if (!match) return null;
   return { imdbId: match[1].toLowerCase(), season: match[2], episode: match[3] };
+}
+
+function validTmdbId(value) {
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? String(id) : null;
+}
+
+/**
+ * The external direct-stream source resolves movies more accurately with the
+ * IMDb and TMDb identifiers together. Series retain its native
+ * IMDb:season:episode format.
+ */
+export function externalStreamIds(type, media, tmdbId) {
+  if (!media?.imdbId) return [];
+  if (type === "movie") {
+    const composite = validTmdbId(tmdbId);
+    return composite ? [`${media.imdbId}:${composite}`, media.imdbId] : [media.imdbId];
+  }
+  const seriesId = [media.imdbId, media.season, media.episode].filter(Boolean).join(":");
+  return seriesId ? [seriesId] : [];
 }
 
 function asTrackerSource(value) {
@@ -142,22 +164,31 @@ export function toOnlineStream(result) {
   };
 }
 
-async function getJson(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      headers: {
-        accept: "application/json",
-        "user-agent": "TrainAgain-Nuvio-Addon/1.1",
-      },
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Upstream status ${response.status}`);
-    return response.json();
-  } finally {
-    clearTimeout(timer);
+async function getJson(url, { attempts = 1 } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, {
+        headers: {
+          accept: "application/json",
+          "user-agent": "TrainAgain-Nuvio-Addon/1.1",
+        },
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Upstream status ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await new Promise(resolve => setTimeout(resolve, EXTERNAL_RETRY_DELAY_MS));
+      }
+    } finally {
+      clearTimeout(timer);
+    }
   }
+  throw lastError;
 }
 
 async function getStreams(type, rawId) {
@@ -188,12 +219,32 @@ async function getOnlineStreams(type, rawId) {
   const media = normalizeId(rawId);
   if (!media) return [];
 
-  const externalId = [media.imdbId, media.season, media.episode].filter(Boolean).join(":");
-  const payload = await getJson(`${EXTERNAL_RESULTS_URL}/stream/${type}/${externalId}.json`);
-  return (Array.isArray(payload?.streams) ? payload.streams : [])
-    .map(toOnlineStream)
-    .filter(Boolean)
-    .slice(0, MAX_EXTERNAL_RESULTS);
+  let tmdbId = null;
+  if (type === "movie") {
+    try {
+      const meta = await getJson(`${CINEMETA_URL}/meta/movie/${media.imdbId}.json`);
+      tmdbId = meta?.meta?.moviedb_id;
+    } catch {
+      // The bare IMDb fallback below still supports titles without TMDb data.
+    }
+  }
+
+  for (const externalId of externalStreamIds(type, media, tmdbId)) {
+    try {
+      const payload = await getJson(
+        `${EXTERNAL_RESULTS_URL}/stream/${type}/${externalId}.json`,
+        { attempts: EXTERNAL_RETRY_ATTEMPTS },
+      );
+      const streams = (Array.isArray(payload?.streams) ? payload.streams : [])
+        .map(toOnlineStream)
+        .filter(Boolean)
+        .slice(0, MAX_EXTERNAL_RESULTS);
+      if (streams.length) return streams;
+    } catch {
+      // Continue to the fallback identifier or return no online results.
+    }
+  }
+  return [];
 }
 
 async function getAllStreams(type, rawId) {
