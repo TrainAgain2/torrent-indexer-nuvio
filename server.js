@@ -4,23 +4,19 @@ import { fileURLToPath } from "node:url";
 
 const ADDON_ID = "org.trainagain2.torrent-indexer-nuvio";
 const ADDON_NAME = "Torrent Indexer";
-const ADDON_VERSION = "1.4.5";
+const ADDON_VERSION = "1.4.6";
 const INDEXER_URL = "https://torrent-indexer.darklyn.org";
 const CINEMETA_URL = "https://v3-cinemeta.strem.io";
-const EXTERNAL_RESULTS_URL = "https://bestcine.dpdns.org";
 const LOGO_PATH = fileURLToPath(new URL("./assets/torrent-indexer-logo.png", import.meta.url));
-const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.5";
+const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.6";
 const MAX_RESULTS = 25;
-const MAX_EXTERNAL_RESULTS = 60;
 const REQUEST_TIMEOUT_MS = 15_000;
-const EXTERNAL_RETRY_ATTEMPTS = 2;
-const EXTERNAL_RETRY_DELAY_MS = 350;
 
 export const manifest = {
   id: ADDON_ID,
   version: ADDON_VERSION,
   name: ADDON_NAME,
-  description: "Resultados de streaming online e BitTorrent para Nuvio.",
+  description: "Resultados BitTorrent para Nuvio.",
   logo: LOGO_URL,
   resources: [{ name: "stream", types: ["movie", "series"], idPrefixes: ["tt"] }],
   types: ["movie", "series"],
@@ -67,26 +63,6 @@ function normalizeId(rawId) {
   return { imdbId: match[1].toLowerCase(), season: match[2], episode: match[3] };
 }
 
-function validTmdbId(value) {
-  const id = Number(value);
-  return Number.isSafeInteger(id) && id > 0 ? String(id) : null;
-}
-
-/**
- * The external direct-stream source resolves movies more accurately with the
- * IMDb and TMDb identifiers together. Series retain its native
- * IMDb:season:episode format.
- */
-export function externalStreamIds(type, media, tmdbId) {
-  if (!media?.imdbId) return [];
-  if (type === "movie") {
-    const composite = validTmdbId(tmdbId);
-    return composite ? [`${media.imdbId}:${composite}`, media.imdbId] : [media.imdbId];
-  }
-  const seriesId = [media.imdbId, media.season, media.episode].filter(Boolean).join(":");
-  return seriesId ? [seriesId] : [];
-}
-
 function asTrackerSource(value) {
   const tracker = String(value || "").trim();
   return /^(https?|udp):\/\//i.test(tracker) ? `tracker:${tracker}` : null;
@@ -118,76 +94,6 @@ export function toStream(result) {
   };
   if (sources.length) stream.sources = sources;
   return stream;
-}
-
-function cleanPresentationText(value) {
-  return String(value || "")
-    .replace(/bestcine/gi, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function groupFragment(value) {
-  return cleanPresentationText(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .slice(0, 80) || "stream";
-}
-
-function directResponseHeaders(url, upstreamResponseHeaders) {
-  const response = upstreamResponseHeaders && typeof upstreamResponseHeaders === "object"
-    ? { ...upstreamResponseHeaders }
-    : {};
-  try {
-    const directUrl = new URL(url);
-    // This direct endpoint emits an MP4 response but uses an opaque `?t=` URL.
-    // Nuvio therefore needs the MIME signal before it chooses the media source.
-    if (
-      directUrl.protocol === "http:" &&
-      directUrl.hostname === "bestcine.duckdns.org" &&
-      directUrl.port === "8080" &&
-      directUrl.searchParams.has("t")
-    ) {
-      response["Content-Type"] = "video/mp4";
-    }
-  } catch {
-    // The HTTP URL was validated by the caller; retain any upstream hints.
-  }
-  return response;
-}
-
-/** Convert an authorized external result into a neutral Nuvio stream label. */
-export function toOnlineStream(result) {
-  const url = String(result?.url || "").trim();
-  if (!/^https?:\/\//i.test(url)) return null;
-
-  const nameLines = cleanPresentationText(result?.name)
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(Boolean);
-  const quality = nameLines.slice(1).join(" · ")
-    || nameLines.find(line => !/bestcine/i.test(line))
-    || "Online";
-  const title = cleanPresentationText(result?.title) || "Stream online";
-  const responseHeaders = directResponseHeaders(url, result?.behaviorHints?.proxyHeaders?.response);
-
-  return {
-    name: `🧲 Torrent Indexer\n${quality}`,
-    title,
-    url,
-    behaviorHints: {
-      notWebReady: Boolean(result?.behaviorHints?.notWebReady),
-      bingeGroup: `trainagain-online-${groupFragment(`${title}-${quality}`)}`,
-      ...(Object.keys(responseHeaders).length ? {
-        proxyHeaders: { response: responseHeaders },
-      } : {}),
-    },
-  };
 }
 
 async function getJson(url, { attempts = 1 } = {}) {
@@ -240,48 +146,8 @@ async function getStreams(type, rawId) {
     .filter(stream => stream && !seen.has(stream.infoHash) && seen.add(stream.infoHash));
 }
 
-async function getOnlineStreams(type, rawId) {
-  if (type !== "movie" && type !== "series") return [];
-  const media = normalizeId(rawId);
-  if (!media) return [];
-
-  let tmdbId = null;
-  if (type === "movie") {
-    try {
-      const meta = await getJson(`${CINEMETA_URL}/meta/movie/${media.imdbId}.json`);
-      tmdbId = meta?.meta?.moviedb_id;
-    } catch {
-      // The bare IMDb fallback below still supports titles without TMDb data.
-    }
-  }
-
-  for (const externalId of externalStreamIds(type, media, tmdbId)) {
-    try {
-      const payload = await getJson(
-        `${EXTERNAL_RESULTS_URL}/stream/${type}/${externalId}.json`,
-        { attempts: EXTERNAL_RETRY_ATTEMPTS },
-      );
-      const streams = (Array.isArray(payload?.streams) ? payload.streams : [])
-        .map(toOnlineStream)
-        .filter(Boolean)
-        .slice(0, MAX_EXTERNAL_RESULTS);
-      if (streams.length) return streams;
-    } catch {
-      // Continue to the fallback identifier or return no online results.
-    }
-  }
-  return [];
-}
-
 async function getAllStreams(type, rawId) {
-  const [onlineResult, torrentResult] = await Promise.allSettled([
-    getOnlineStreams(type, rawId),
-    getStreams(type, rawId),
-  ]);
-  const candidates = [
-    ...(onlineResult.status === "fulfilled" ? onlineResult.value : []),
-    ...(torrentResult.status === "fulfilled" ? torrentResult.value : []),
-  ];
+  const candidates = await getStreams(type, rawId);
   const seen = new Set();
   return candidates.filter(stream => {
     const key = stream.url || stream.infoHash;
