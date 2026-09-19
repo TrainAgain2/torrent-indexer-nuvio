@@ -4,12 +4,12 @@ import { fileURLToPath } from "node:url";
 
 const ADDON_ID = "org.trainagain2.torrent-indexer-nuvio";
 const ADDON_NAME = "Torrent Indexer";
-const ADDON_VERSION = "1.4.4";
+const ADDON_VERSION = "1.4.5";
 const INDEXER_URL = "https://torrent-indexer.darklyn.org";
 const CINEMETA_URL = "https://v3-cinemeta.strem.io";
 const EXTERNAL_RESULTS_URL = "https://bestcine.dpdns.org";
 const LOGO_PATH = fileURLToPath(new URL("./assets/torrent-indexer-logo.png", import.meta.url));
-const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.4";
+const LOGO_URL = "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.5";
 const MAX_RESULTS = 25;
 const MAX_EXTERNAL_RESULTS = 60;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -139,6 +139,28 @@ function groupFragment(value) {
     .slice(0, 80) || "stream";
 }
 
+function directResponseHeaders(url, upstreamResponseHeaders) {
+  const response = upstreamResponseHeaders && typeof upstreamResponseHeaders === "object"
+    ? { ...upstreamResponseHeaders }
+    : {};
+  try {
+    const directUrl = new URL(url);
+    // This direct endpoint emits an MP4 response but uses an opaque `?t=` URL.
+    // Nuvio therefore needs the MIME signal before it chooses the media source.
+    if (
+      directUrl.protocol === "http:" &&
+      directUrl.hostname === "bestcine.duckdns.org" &&
+      directUrl.port === "8080" &&
+      directUrl.searchParams.has("t")
+    ) {
+      response["Content-Type"] = "video/mp4";
+    }
+  } catch {
+    // The HTTP URL was validated by the caller; retain any upstream hints.
+  }
+  return response;
+}
+
 /** Convert an authorized external result into a neutral Nuvio stream label. */
 export function toOnlineStream(result) {
   const url = String(result?.url || "").trim();
@@ -152,6 +174,7 @@ export function toOnlineStream(result) {
     || nameLines.find(line => !/bestcine/i.test(line))
     || "Online";
   const title = cleanPresentationText(result?.title) || "Stream online";
+  const responseHeaders = directResponseHeaders(url, result?.behaviorHints?.proxyHeaders?.response);
 
   return {
     name: `🧲 Torrent Indexer\n${quality}`,
@@ -160,6 +183,9 @@ export function toOnlineStream(result) {
     behaviorHints: {
       notWebReady: Boolean(result?.behaviorHints?.notWebReady),
       bingeGroup: `trainagain-online-${groupFragment(`${title}-${quality}`)}`,
+      ...(Object.keys(responseHeaders).length ? {
+        proxyHeaders: { response: responseHeaders },
+      } : {}),
     },
   };
 }

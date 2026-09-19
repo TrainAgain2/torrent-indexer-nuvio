@@ -6,10 +6,10 @@ test("manifest declares Nuvio movie and series streams", () => {
   assert.equal(typeof handler, "function");
   assert.equal(manifest.id, "org.trainagain2.torrent-indexer-nuvio");
   assert.equal(manifest.name, "Torrent Indexer");
-  assert.equal(manifest.version, "1.4.4");
+  assert.equal(manifest.version, "1.4.5");
   assert.equal(
     manifest.logo,
-    "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.4",
+    "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.5",
   );
   assert.equal(manifest.behaviorHints.p2p, true);
   assert.deepEqual(manifest.types, ["movie", "series"]);
@@ -58,6 +58,15 @@ test("online result uses a neutral presentation without an origin label", () => 
   assert.doesNotMatch(stream.title, /bestcine/i);
   assert.match(stream.behaviorHints.bingeGroup, /^trainagain-online-/);
   assert.equal(stream.behaviorHints.notWebReady, true);
+});
+
+test("opaque direct MP4 links provide a response MIME hint", () => {
+  const stream = toOnlineStream({
+    name: "Online\n1080p",
+    title: "Example Movie",
+    url: "http://bestcine.duckdns.org:8080/?t=opaque-token",
+  });
+  assert.equal(stream.behaviorHints.proxyHeaders.response["Content-Type"], "video/mp4");
 });
 
 test("online result without an HTTP URL is ignored", () => {

@@ -1,9 +1,9 @@
 {
   "id": "org.trainagain2.torrent-indexer-nuvio",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "name": "Torrent Indexer",
   "description": "Resultados de streaming online e BitTorrent para Nuvio.",
-  "logo": "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.4",
+  "logo": "https://torrent-indexer-nuvio.vercel.app/assets/torrent-indexer-logo.png?v=1.4.5",
   "resources": [
     {
       "name": "stream",
